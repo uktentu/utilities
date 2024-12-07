@@ -1,0 +1,25 @@
+{
+    "manifest_version": 3,
+    "name": "Website Locker",
+    "version": "1.0",
+    "description": "Restrict access to specific websites.",
+    "permissions": ["declarativeNetRequest", "storage"],
+    "host_permissions": ["<all_urls>"],
+    "background": {
+      "service_worker": "background.js"
+    },
+    "action": {
+      "default_popup": "popup.html",
+      "default_icon": "icon.png"
+    },
+    "declarative_net_request": {
+      "rule_resources": [
+        {
+          "id": "ruleset_1",
+          "enabled": true,
+          "path": "rules.json"
+        }
+      ]
+    }
+  }
+  

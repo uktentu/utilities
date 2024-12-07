@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Website Locker</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h2>Website Locker</h2>
+
+  <div id="auth-section">
+    <input type="password" id="password" placeholder="Enter password" />
+    <button id="authenticate">Authenticate</button>
+    <p id="auth-error" style="color:red; display:none;">Incorrect Password</p>
+  </div>
+
+  <div id="site-section" style="display: none;">
+    <input type="text" id="website" placeholder="Enter website (e.g., example.com)" />
+    <button id="addSite">Add</button>
+    <ul id="blockedList"></ul>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
