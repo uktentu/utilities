@@ -1,14 +1,14 @@
 import os
 import subprocess
 import re
-from Api_Keys.OpenApi import ApiKey
+from Api_Keys.OpenApi import ApiKey # Replace the import Api key from local
 
 # Optional: AI Integration
 def generate_ai_summary(changes):
     import openai
-    openai.api_key = ApiKey  # Replace with your API key
+    openai.api_key = ApiKey
     response = openai.Completion.create(
-        model="text-davinci-003",
+        model="gpt-3.5-turbo",
         prompt=f"Summarize the following code changes:\n{changes}",
         max_tokens=100,
     )
