@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f172a">
+  <title>{% block title %}Deployer{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
+  <link rel="icon" type="image/svg+xml"
+        href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%233b82f6'/%3E%3Ctext x='16' y='22' text-anchor='middle' font-family='system-ui' font-size='18' font-weight='800' fill='white'%3ED%3C/text%3E%3C/svg%3E">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <span class="brand-mark">D</span>
+        <span>Deployer</span>
+      </div>
+      <nav class="nav">
+        <a href="{{ url_for('admin') }}" class="{% if active == 'dashboard' %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+          Dashboard
+        </a>
+        <a href="#sites" class="{% if active == 'sites' %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+          Sites
+        </a>
+        <a href="{{ url_for('admin') }}#deploy">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+          Deploy
+        </a>
+        <a href="{{ url_for('guide') }}" class="{% if active == 'guide' %}active{% endif %}">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/></svg>
+          Setup guide
+        </a>
+      </nav>
+      <div class="sidebar-foot">
+        <div>v0.1 · localhost</div>
+        <div style="margin-top:4px">Python {{ py_version or '' }}</div>
+      </div>
+    </aside>
+
+    <main class="main">
+      <nav class="mobile-nav" aria-label="Primary (mobile)">
+        <a href="{{ url_for('admin') }}" class="brand" style="text-decoration:none; color:var(--text);">
+          <span class="brand-mark">D</span>
+          <span>Deployer</span>
+        </a>
+        <div class="mobile-nav-links">
+          <a href="{{ url_for('admin') }}" class="{% if active == 'dashboard' %}active{% endif %}">Dashboard</a>
+          <a href="{{ url_for('guide') }}" class="{% if active == 'guide' %}active{% endif %}">Guide</a>
+        </div>
+      </nav>
+      <div class="topbar">
+        <div class="crumbs">
+          {% block crumbs %}<span class="current">Dashboard</span>{% endblock %}
+        </div>
+        <div>
+          {% block topbar_actions %}{% endblock %}
+        </div>
+      </div>
+
+      <div class="content">
+        {% block content %}{% endblock %}
+      </div>
+    </main>
+  </div>
+
+  {# Flashed messages get converted into toasts by app.js #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+      <div data-flash="{{ cat }}" hidden>{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

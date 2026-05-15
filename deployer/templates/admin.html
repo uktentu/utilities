@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+{% set active = 'dashboard' %}
+{% block title %}Dashboard · Deployer{% endblock %}
+
+{% block crumbs %}<span class="current">Dashboard</span>{% endblock %}
+
+{% block content %}
+  <header class="page-header">
+    <div>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-sub">Deploy static sites and capture form submissions — all from one place.</p>
+    </div>
+  </header>
+
+  <section class="stats">
+    <div class="stat">
+      <div class="stat-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/></svg>
+      </div>
+      <div>
+        <div class="stat-label">Sites</div>
+        <div class="stat-value">{{ totals.sites }}</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon green">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 9h16M9 4v16"/></svg>
+      </div>
+      <div>
+        <div class="stat-label">Forms</div>
+        <div class="stat-value">{{ totals.forms }}</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon amber">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+      </div>
+      <div>
+        <div class="stat-label">Submissions</div>
+        <div class="stat-value">{{ totals.submissions }}</div>
+      </div>
+    </div>
+    <div class="stat">
+      <div class="stat-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6"/></svg>
+      </div>
+      <div>
+        <div class="stat-label">Datasets</div>
+        <div class="stat-value">{{ totals.datasets }}</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deploy" class="card deploy-card">
+    <header class="deploy-head">
+      <div>
+        <h3>Deploy a site</h3>
+        <p class="page-sub" style="margin:2px 0 0;">
+          Upload a <code>.zip</code> of your static site —
+          <a href="{{ url_for('guide') }}">read the setup guide</a> if it's your first time.
+        </p>
+      </div>
+      <span class="pill">max 50 MB</span>
+    </header>
+
+    <form class="deploy-form"
+          action="{{ url_for('admin_upload', site=None) }}"
+          method="post" enctype="multipart/form-data">
+      <label class="dropzone" data-dropzone>
+        <div class="dropzone-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        </div>
+        <div class="big">Drop a .zip here, or click to browse</div>
+        <div class="small">Bundle the folder that contains your <code>index.html</code>.</div>
+        <input type="file" name="zip" accept=".zip" required>
+        <div class="file-chosen" data-file-chosen></div>
+      </label>
+
+      <div class="deploy-row">
+        <label class="field" style="flex:1;">
+          <span>Site name</span>
+          <input name="name" required pattern="[a-z0-9][a-z0-9_-]{0,49}" placeholder="my-landing">
+          <span class="hint">Lowercase letters, digits, dashes — appears in <code>/sites/&lt;name&gt;/</code>.</span>
+        </label>
+        <button type="submit" class="btn btn-primary btn-lg">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          Deploy site
+        </button>
+      </div>
+    </form>
+  </section>
+
+  <section class="card examples-card">
+    <header class="examples-head">
+      <div>
+        <h3>Try a starter example</h3>
+        <p class="page-sub" style="margin:2px 0 0;">
+          One-click deploy a working app that uses the live datasets API.
+        </p>
+      </div>
+    </header>
+    <div class="examples-grid">
+      <article class="example">
+        <div class="example-icon">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/></svg>
+        </div>
+        <div class="example-body">
+          <h4>Production issues tracker</h4>
+          <p>
+            Shared list of incidents — anyone with the link can add issues and mark them
+            <strong>Ignorable</strong> or <strong>Treated</strong>. Live-syncs across all visitors,
+            stores everything in a server-side dataset.
+          </p>
+        </div>
+        <form method="post" action="{{ url_for('admin_deploy_example', example='issues-tracker') }}"
+              class="example-action">
+          <input type="hidden" name="name" value="issues">
+          <button class="btn btn-primary">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+            Deploy
+          </button>
+        </form>
+      </article>
+    </div>
+  </section>
+
+  <div class="section-head" id="sites">
+    <h2>Your sites</h2>
+    <span class="pill blue">{{ sites|length }} total</span>
+  </div>
+
+  {% if sites %}
+    <div class="site-grid">
+      {% for s in sites %}
+        <article class="site-card">
+          <div class="site-card-head">
+            <a class="site-card-name" href="{{ url_for('admin_site', site=s.name) }}">{{ s.name }}</a>
+            <span class="pill green">live</span>
+          </div>
+          <div class="site-card-meta">
+            <span><b>{{ s.forms|length }}</b> forms</span>
+            <span><b>{{ s.submission_count }}</b> submissions</span>
+            {% if s.datasets %}<span><b>{{ s.datasets|length }}</b> datasets</span>{% endif %}
+          </div>
+          <div class="site-card-actions">
+            <a class="btn btn-sm" href="{{ url_for('serve_site', site=s.name) }}" target="_blank" rel="noopener">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              Open
+            </a>
+            <a class="btn btn-sm" href="{{ url_for('admin_site', site=s.name) }}">
+              <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/></svg>
+              Manage
+            </a>
+            <form method="post" action="{{ url_for('admin_delete', site=s.name) }}"
+                  onsubmit="return confirm('Delete site &quot;{{ s.name }}&quot; and all its submissions?');"
+                  style="margin-left:auto;">
+              <button type="submit" class="btn btn-sm btn-danger">Delete</button>
+            </form>
+          </div>
+        </article>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="empty">
+      <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:.6"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M9 21V9"/></svg>
+      <div class="big">No sites yet</div>
+      <div>Drop a <code>.zip</code> above to deploy your first one.</div>
+    </div>
+  {% endif %}
+{% endblock %}
