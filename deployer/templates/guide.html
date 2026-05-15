@@ -86,147 +86,193 @@
 
         <div class="snippet">
           <button class="copy" data-copy="#ai-prompt">Copy prompt</button>
-<pre id="ai-prompt" style="margin:0;">You are my deployment assistant. I am deploying a static website to **Deployer** — a
-local Flask app at http://localhost:5000 that hosts static sites and captures form data.
+<pre id="ai-prompt" style="margin:0;">You are an autonomous deployment agent. I am deploying a static website to **Deployer**
+— a self-hosted Flask app at http://localhost:5000.
 
-I will paste my project files at the bottom of this message. Analyse them and respond
-with a deployment plan using EXACTLY the seven numbered sections below. Do not add any
-other sections. Do not explain the sections — just fill them in.
+Your job: read my project files (pasted at the bottom), make every decision yourself,
+and output a complete deployment package. No questions, no placeholders, no pseudocode.
+Every code block you write must be copy-paste-ready and work exactly as-is.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-DEPLOYER REFERENCE  (background only — do not echo this in your output)
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+DEPLOYER CAPABILITIES  (internalize — do not repeat in output)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-HOSTING
-  • Zip is served at  /sites/&lt;site-name&gt;/
-  • index.html must be at the zip root (or inside one wrapper folder — auto-unwrapped)
-  • Every asset path in HTML/CSS/JS must be RELATIVE — no leading /
-  • Remove any &lt;base href&gt; tags (they break sub-path routing)
+① STATIC HOSTING
+   Served at /sites/&lt;site-name&gt;/   (index.html must exist at zip root or single wrapper folder)
+   ALL asset paths must be RELATIVE — no leading /    Remove any &lt;base href&gt; tags.
 
-FORM CAPTURE  (append-only — contact, signup, feedback, RSVP, survey, etc.)
-  • Wire &lt;form&gt; to:  action="/submit/&lt;site&gt;/&lt;form-name&gt;" method="POST"
-  • Every named &lt;input&gt;/&lt;textarea&gt;/&lt;select&gt; is auto-saved to CSV + JSON
-  • Optional redirect:  &lt;input type="hidden" name="_redirect" value="thanks.html"&gt;
-  • Form-name rules: lowercase, digits, dashes, underscores — max 50 chars
+② FORM CAPTURE  — append-only, zero config, auto-schema
+   Wire any &lt;form&gt; to:    action="/submit/&lt;site&gt;/&lt;form-name&gt;"  method="POST"
+   Every named field auto-saved to CSV + JSON.
+   Optional browser redirect:   &lt;input type="hidden" name="_redirect" value="thanks.html"&gt;
+   Name rules: lowercase, digits, dashes, underscores, max 50 chars.
 
-DATASETS API  (live shared state — issue trackers, todos, polls, votes, kanban, etc.
-               use whenever multiple users add / edit / delete shared items)
-  GET    /data/&lt;site&gt;/&lt;dataset&gt;/items[?since=&lt;rev&gt;]
-         → { changed, rev, items: [...] }   (if since==rev: { changed:false, rev })
-  POST   /data/&lt;site&gt;/&lt;dataset&gt;/items          body: { ...fields, _actor?:"name" }  → 201 { item, rev }
-  PATCH  /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;     body: { ...fields }                  → 200 { item, rev }
-  DELETE /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;                                           → 200 { rev }
-  Server-managed keys (strip from your code, never send):  id  _ts  _updated  _created_by  _updated_by
-  Always derive site name from URL:  const SITE = location.pathname.split('/')[2];
+③ DATASETS API  — live shared state, all same-origin, no CORS
+   Use for: issue trackers, status boards, todos, polls, votes, kanban, RSVPs,
+            OR any hardcoded JS/HTML array where you need mutable shared fields
+            (status, notes, owner, flag…) visible to all users in real time.
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-YOUR OUTPUT — FILL IN EVERY SECTION BELOW
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+   GET    /data/&lt;site&gt;/&lt;ds&gt;/items[?since=&lt;rev&gt;]
+          → { changed, rev, items }  |  { changed:false, rev }  (no payload when unchanged)
+   POST   /data/&lt;site&gt;/&lt;ds&gt;/items          { ...fields, _actor?:"name" }  → 201 { item, rev }
+   POST   /data/&lt;site&gt;/&lt;ds&gt;/seed           { items:[...], key:"field", mode:"init"|"upsert"|"replace" }
+                                            → { seeded, updated, skipped, rev, items }
+   PATCH  /data/&lt;site&gt;/&lt;ds&gt;/items/&lt;id&gt;    { ...fields }                  → 200 { item, rev }
+   DELETE /data/&lt;site&gt;/&lt;ds&gt;/items/&lt;id&gt;                                   → 200 { rev }
+   DELETE /data/&lt;site&gt;/&lt;ds&gt;/items                                         → 200 { cleared, rev }
+
+   Seed modes:
+     "init"    — runs only when dataset is empty. Safe on every page load. First user seeds it.
+     "upsert"  — merges by key field. Adds new master entries, refreshes master-only fields,
+                 never overwrites mutable fields (status, notes…) users have already edited.
+     "replace" — clears all items, re-seeds. Use for hard resets only.
+
+   Server-managed (never send, always stripped):  id  _ts  _updated  _created_by  _updated_by
+   Always derive site from URL:  const SITE = location.pathname.split('/')[2];
+   Always poll cheaply:          fetch(API + '?since=' + rev)  — no payload when unchanged.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+STEP 0 — SCAN  (do this silently before writing any section)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Before filling the sections, scan every file for:
+  • Absolute asset paths  (src="/…"  href="/…"  url('/…'))
+  • &lt;form&gt; elements  →  note file, current action, all named/unnamed fields
+  • Hardcoded JS arrays / const X = [...] / var Y = [...] / HTML &lt;table&gt; with static rows
+      that represent a list of entities (services, products, teams, issues, SLAs, SVCs…)
+  • Interactive UI where users create / edit / delete shared items
+  • Existing mutable fields already in the HTML that should become live
+      (status badges, flag icons, notes text, owner names — currently hardcoded)
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+OUTPUT — 7 SECTIONS, FILLED IN COMPLETELY, NO PLACEHOLDERS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ## SECTION 1 — SITE NAME
-One line only. The exact value to type into Deployer's "Site name" field.
-Infer it from my project name / purpose. Rules: lowercase letters, digits, dashes. Max 50 chars.
+Exactly one line — the value to type into Deployer's "Site name" field.
+Lowercase letters, digits, dashes only. Max 50 chars. Infer from project purpose.
 
-site-name: YOUR-ANSWER-HERE
+site-name: ___
 
 ---
 
 ## SECTION 2 — ASSET PATH FIXES
-Every &lt;link href&gt;, &lt;script src&gt;, &lt;img src&gt;, &lt;a href&gt;, CSS url() that uses an absolute
-path (starts with "/") or references a file with the wrong relative path.
+For every broken or absolute asset reference found:
 
-For each:
   File:    &lt;filename&gt;
-  Line:    &lt;line number or unique surrounding text&gt;
-  Before:  &lt;exact current attribute value&gt;
+  Line:    &lt;line number or enough surrounding text to locate it&gt;
+  Before:  &lt;exact current string&gt;
   After:   &lt;exact corrected relative path&gt;
 
-Also flag any &lt;base href&gt; tag (must be removed) and any CDN URLs that could break offline.
-
-If nothing needs fixing, write: NONE
+Flag any &lt;base href&gt; (must be deleted) and CDN links that fail offline.
+If none: NONE
 
 ---
 
 ## SECTION 3 — FORM WIRING
-For every &lt;form&gt; in the project:
+One block per &lt;form&gt; found:
 
-  File:          &lt;filename&gt;
-  Purpose:       &lt;what this form does — one phrase&gt;
-  Form name:     &lt;the short name to use, e.g. contact / signup / feedback&gt;
-  Replace with:  action="/submit/SITE-NAME/FORM-NAME" method="POST"
-  Missing name= attributes:
-    - &lt;element type + placeholder/label&gt; → add  name="SUGGESTED-NAME"
-    (write NONE if all inputs already have name=)
-  Add redirect?  YES → &lt;input type="hidden" name="_redirect" value="PAGE.html"&gt;
-                 NO
+  File:         &lt;filename&gt;
+  Purpose:      &lt;one phrase — e.g. "contact form", "team signup"&gt;
+  Form name:    &lt;short kebab-case name&gt;
+  Change to:    action="/submit/SITE-NAME/FORM-NAME" method="POST"
+  Fix inputs:   list every &lt;input&gt;/&lt;textarea&gt;/&lt;select&gt; missing name="" + the name to add
+                (write NONE if all already have name=)
+  Redirect:     &lt;input type="hidden" name="_redirect" value="PAGE.html"&gt;   or   NONE
 
-Repeat this block for every form found. If no forms exist, write: NO FORMS FOUND
+No forms found: NO FORMS FOUND
 
 ---
 
-## SECTION 4 — DATASETS (live shared state)
-Only include this section if my project has a feature where multiple users see and
-change the same list of items in real time (issue tracker, todo, poll, vote, etc.).
+## SECTION 4 — LIVE SHARED STATE
+Produce one complete block for each candidate found during the scan.
+A candidate is ANY of:
+  • A hardcoded JS array / HTML table representing a list of real-world entities
+  • An interactive feature where multiple users create / edit / delete shared items
+  • Any field currently hardcoded in HTML that should be live and shared (status, notes…)
 
-For each candidate:
+For EACH candidate — write EVERY sub-field below in full, no pseudocode:
 
-  Feature:       &lt;what it is&gt;
-  Dataset name:  &lt;kebab-case&gt;
-  Item shape:    { field: type, ... }   (only YOUR fields — no server-reserved keys)
-  HTML scaffold: &lt;any empty container element the script needs, e.g. &lt;ul id="list"&gt;&lt;/ul&gt;&gt;
-  Paste into:    &lt;filename&gt; just before &lt;/body&gt;
-  Script:
-    &lt;script&gt;
-    // complete vanilla-JS block, no dependencies
-    // derives SITE from location.pathname.split('/')[2]
-    // implements: load(), add(fields), update(id, fields), remove(id)
-    // polls every 2000 ms using ?since=rev
-    // renders into the HTML scaffold above
-    // escapes all user strings with esc() to prevent XSS
-    &lt;/script&gt;
+  FEATURE:       &lt;specific name, e.g. "SVC service status board"&gt;
+  KIND:          MASTER-DATA-SEED  |  USER-CREATED-ITEMS  |  BOTH
+  DATASET NAME:  &lt;kebab-case, e.g. services&gt;
+  KEY FIELD:     &lt;the field that uniquely identifies each item, e.g. "name" or "service_id"&gt;
 
-If nothing qualifies, write: NO DATASET CANDIDATES
+  MASTER ARRAY (only for MASTER-DATA-SEED or BOTH):
+  Write the exact JS array extracted / reconstructed from the files.
+  Include ONLY master (static) fields — omit mutable fields (status, notes…) that
+  will be managed by users. The server adds those as users interact.
+
+    const MASTER_DATA = [
+      &lt;actual items from the file — real values, not examples&gt;
+    ];
+
+  MUTABLE FIELDS USERS CAN EDIT:
+    &lt;field&gt;: &lt;type&gt; — &lt;what it represents&gt;
+    (list every field users will PATCH — status, notes, owner, flag, priority…)
+
+  HTML TO ADD (exact HTML to insert into the file, at the location shown):
+    Location: &lt;filename&gt; — &lt;after which existing element, or "before &lt;/body&gt;"&gt;
+    &lt;!-- paste this exactly --&gt;
+    &lt;div id="CONTAINER-ID"&gt;&lt;/div&gt;
+
+  COMPLETE SCRIPT (paste just before &lt;/body&gt; in &lt;filename&gt;):
+  Write the entire &lt;script&gt; block. Real code, no comments like "// your render fn here".
+  Requirements:
+    - const SITE = location.pathname.split('/')[2];
+    - const API  = '/data/' + SITE + '/DATASET/items';
+    - const SEED = '/data/' + SITE + '/DATASET/seed';
+    - For MASTER-DATA-SEED: seedMaster() calls SEED with mode:"upsert" and the actual MASTER_DATA
+    - load() calls GET with ?since=rev; skips render if changed===false
+    - render(items) builds real DOM into the container — actual HTML, XSS-safe with esc()
+    - esc(s): escapes & < > " for XSS safety
+    - For mutable fields: one button / control per mutable field, calling PATCH with the new value
+    - _actor read from localStorage.getItem('actor') || 'anonymous'
+    - For USER-CREATED-ITEMS: an add() function that calls POST
+    - setInterval(load, 2000); then call seedMaster().then(load) or just load()
+
+  WHAT TO REMOVE FROM THE FILE:
+    &lt;file&gt; line &lt;N&gt;: delete / replace &lt;the hardcoded element being superseded&gt;
 
 ---
 
 ## SECTION 5 — FILE CHECKLIST
-Every file that needs a change. One line per file:
+One line per file that needs any edit:
 
-[ ] filename.html — &lt;one-sentence summary of what changes&gt;
-[ ] styles/main.css — &lt;one-sentence summary&gt;
-
----
-
-## SECTION 6 — ZIP &amp; DEPLOY COMMAND
-The exact terminal command to zip the project for upload (macOS / Linux).
-Must exclude .DS_Store and __MACOSX. Use the corrected project folder name.
-
-```
-cd /path/to/parent-folder
-zip -r SITE-NAME.zip YOUR-FOLDER -x "*.DS_Store" "__MACOSX/*"
-```
-
-Then open:  http://localhost:5000
-→ Drag SITE-NAME.zip into the Deploy box
-→ Set "Site name" to the value from SECTION 1
-→ Click Deploy site
+[ ] &lt;filename&gt; — &lt;one sentence: what changes and why&gt;
 
 ---
 
-## SECTION 7 — PATCHED FILES
-For every file that needs 30 lines of change or fewer, paste the COMPLETE corrected
-file below. Label each with the file path on the line above the code block.
-For larger files, skip them here — the Section 5 checklist covers them.
+## SECTION 6 — ZIP &amp; DEPLOY
+Exact terminal command:
+
+```
+cd /path/to/parent-of-project-folder
+zip -r SITE-NAME.zip PROJECT-FOLDER -x "*.DS_Store" "__MACOSX/*"
+```
+
+Then:
+  Open   → http://localhost:5000
+  Drop   → SITE-NAME.zip into the Deploy box
+  Name   → (value from Section 1)
+  Click  → Deploy site
+
+---
+
+## SECTION 7 — COMPLETE PATCHED FILES
+For every file with ≤ 60 lines of change: paste the ENTIRE corrected file.
+Label each block with the file path on the line above the code fence.
+Larger files: omit here — Section 5 checklist covers them.
 
 path/to/file.html
 ```html
-&lt;!-- full corrected file here --&gt;
+(full corrected file — no omissions, no "[rest unchanged]")
 ```
 
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 MY PROJECT FILES
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-(Paste each file in this format, or attach them directly)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+(Paste each file below in this format, or attach them directly)
 
 === path/to/index.html ===
 &lt;file contents&gt;
@@ -242,21 +288,26 @@ MY PROJECT FILES
         <p style="margin-top:16px;"><strong>How to use it</strong>:</p>
         <ol style="color: var(--text-muted); padding-left: 20px;">
           <li>Click <strong>Copy prompt</strong> above.</li>
-          <li>Open your AI assistant (Claude, ChatGPT, Gemini, …).</li>
-          <li>Paste the prompt. Then paste your project files at the bottom under the
-            <code>=== path/to/file ===</code> markers, or attach the files directly.</li>
-          <li>The AI will return 7 sections. Each section maps to one concrete action:
-            Section 1 → type the site name; Section 3 → swap the form attributes;
-            Section 7 → paste the corrected files; Section 6 → run the zip command and deploy.</li>
-          <li>Once you've applied all edits, run the zip command from Section 6, drop the
-            <code>.zip</code> into the <a href="{{ url_for('admin') }}#deploy">Deploy box</a>,
-            and you're live.</li>
+          <li>Open your AI (Claude, ChatGPT, Gemini…). Paste the prompt.</li>
+          <li>Paste your project files at the bottom under the <code>=== path/to/file ===</code>
+            markers, or attach them directly. Include every file that has forms, data arrays,
+            or interactive UI — skip pure assets (images, fonts).</li>
+          <li>The AI scans your files autonomously, then returns 7 sections — each maps to
+            one concrete action with zero interpretation required:
+            <br>Section 1 → site name field &nbsp;·&nbsp;
+            Section 3 → paste the form action replacements &nbsp;·&nbsp;
+            Section 4 → paste the complete script block(s) &nbsp;·&nbsp;
+            Section 7 → overwrite files with patched versions &nbsp;·&nbsp;
+            Section 6 → run the zip command and deploy.</li>
+          <li>If your page has hardcoded data arrays (service lists, SVC arrays, team tables),
+            Section 4 will detect them and produce a ready-to-paste seed script that turns
+            them into live shared state — no manual wiring needed.</li>
         </ol>
 
         <p class="page-sub" style="margin-top:14px;">
-          Tip: for large projects, only paste the files that contain forms or interactive UI —
-          the AI doesn't need to see pure asset files (images, icon SVGs, fonts). Section 5
-          will tell you which files to edit even if you didn't paste them.
+          Tip: the agent works best when you paste the actual files rather than describing them.
+          Attach everything with forms or data arrays. Skip images, compiled bundles, and
+          generated files — the agent won't need them.
         </p>
       </section>
 
@@ -355,7 +406,8 @@ zip -r my-landing.zip my-landing -x "*.DS_Store" "__MACOSX/*"</pre>
         <p>
           Forms are append-only — perfect for capture, not for editing. When you need
           <strong>shared state that all visitors can read and update</strong> (issue trackers,
-          to-do lists, polls, RSVP lists, etc.), use the <em>datasets API</em> instead.
+          service status boards, to-do lists, polls, RSVP lists, etc.), use the
+          <em>datasets API</em> instead.
         </p>
         <p>
           Each dataset is a list of items identified by a server-generated <code>id</code>, with a
@@ -364,58 +416,170 @@ zip -r my-landing.zip my-landing -x "*.DS_Store" "__MACOSX/*"</pre>
           dashboard to see it in action.
         </p>
 
-        <p><strong>Endpoints</strong> (no auth — anyone with the URL can read/write):</p>
+        <p><strong>All endpoints</strong> (no auth — anyone with the URL can read/write):</p>
         <div class="snippet">
           <button class="copy" data-copy="#api-spec">Copy</button>
 <pre id="api-spec" style="margin:0;">GET    /data/&lt;site&gt;/&lt;dataset&gt;/items[?since=&lt;rev&gt;]
    → { changed, rev, items: [...] }
-   (when since == rev, body is just { changed:false, rev } — cheap polling)
+   (when since == rev: { changed:false, rev } — no payload, cheap poll)
 
 POST   /data/&lt;site&gt;/&lt;dataset&gt;/items
    body: { ...your fields, _actor?: "name" }
    → 201 { item, rev }
+
+POST   /data/&lt;site&gt;/&lt;dataset&gt;/seed
+   body: { items: [...], key?: "fieldName", mode?: "init"|"upsert"|"replace" }
+   → { seeded, updated, skipped, rev, items }
 
 PATCH  /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;
    body: { ...fields to merge, _actor?: "name" }
    → 200 { item, rev }
 
 DELETE /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;
-   → 200 { rev }</pre>
+   → 200 { rev }
+
+DELETE /data/&lt;site&gt;/&lt;dataset&gt;/items
+   → 200 { cleared, rev }          ← clears ALL items</pre>
         </div>
 
-        <p><strong>Minimal client</strong> — paste into any page deployed under
-          <code>/sites/&lt;site&gt;/</code>:</p>
+        <p><strong>Reserved fields</strong> — stripped from client input, managed by server:</p>
+        <p class="page-sub" style="margin-top:0;">
+          <code>id</code> &nbsp;·&nbsp; <code>_ts</code> (created at) &nbsp;·&nbsp;
+          <code>_updated</code> &nbsp;·&nbsp; <code>_created_by</code> &nbsp;·&nbsp;
+          <code>_updated_by</code>. Pass <code>_actor: "name"</code> on writes to attribute changes.
+        </p>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+
+        <h3 style="margin:0 0 8px; font-size:15px;">
+          Pattern: hardcoded master data → live shared state
+        </h3>
+        <p>
+          If your page already has a hardcoded JS array (services, teams, SLAs, SVC list…) and
+          you want to add live mutable fields on top (status, notes, owner…), use the
+          <strong>seed endpoint</strong> to push that array into a dataset once, then let all
+          users read and update it in real time.
+        </p>
+
+        <p><strong>Three seed modes</strong>:</p>
+        <ul>
+          <li>
+            <code>mode: "init"</code> <em>(default)</em> — seeds only when the dataset is empty.
+            The first user to load the page populates it; everyone else just reads the live state.
+            Safe to call on every page load.
+          </li>
+          <li>
+            <code>mode: "upsert"</code> — merges by a key field (e.g. <code>"name"</code> or
+            <code>"service_id"</code>). New master entries are added; existing ones get their
+            master-data fields refreshed without overwriting mutable fields like
+            <code>status</code>. Use this when the master list grows over time.
+          </li>
+          <li>
+            <code>mode: "replace"</code> — clears all items and re-seeds from scratch.
+            Use for a full reset (e.g. a hard master-data change). All live edits are lost.
+          </li>
+        </ul>
+
+        <p><strong>Complete example — service status board</strong>:</p>
         <div class="snippet">
-          <button class="copy" data-copy="#api-client">Copy</button>
-<pre id="api-client" style="margin:0;">const SITE = location.pathname.split('/')[2];     // "/sites/&lt;name&gt;/" → name
-const API  = '/data/' + SITE + '/issues/items';
+          <button class="copy" data-copy="#seed-example">Copy</button>
+<pre id="seed-example" style="margin:0;">&lt;!-- index.html — paste just before &lt;/body&gt; --&gt;
+&lt;ul id="svc-list"&gt;&lt;/ul&gt;
+
+&lt;script&gt;
+// ── Master data (hardcoded, owned by you) ─────────────────────────────────
+const MASTER = [
+  { name: 'Payment Gateway', team: 'Payments',  sla: '99.9%' },
+  { name: 'Auth Service',    team: 'Platform',  sla: '99.95%' },
+  { name: 'Notifications',   team: 'Comms',     sla: '99.5%' },
+  // add more services here — upsert mode keeps live edits intact
+];
+
+// ── Deployer wiring ───────────────────────────────────────────────────────
+const SITE    = location.pathname.split('/')[2];   // works on any deploy
+const API     = '/data/' + SITE + '/services/items';
+const SEED_EP = '/data/' + SITE + '/services/seed';
 
 let rev = -1;
+
+// Seed master data into the dataset.
+// mode "upsert" + key "name": adds new services, refreshes master fields,
+// never overwrites live fields (status, notes) that users have edited.
+async function seedMaster() {
+  await fetch(SEED_EP, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: MASTER, key: 'name', mode: 'upsert' })
+  });
+}
+
 async function load() {
   const r = await fetch(API + (rev &lt; 0 ? '' : '?since=' + rev));
   const d = await r.json();
   if (d.changed === false) return;
   rev = d.rev;
-  render(d.items);                                  // ← your render fn
+  render(d.items);
 }
-async function add(fields)        { await fetch(API,           { method:'POST',  headers:{'Content-Type':'application/json'}, body: JSON.stringify(fields) }); load(); }
-async function update(id, fields) { await fetch(API+'/'+id,    { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(fields) }); load(); }
-async function remove(id)         { await fetch(API+'/'+id,    { method:'DELETE' }); load(); }
 
-setInterval(load, 2000);
-load();</pre>
+async function setStatus(id, status) {
+  const actor = localStorage.getItem('actor') || 'unknown';
+  await fetch(API + '/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, _actor: actor })
+  });
+  load();
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&amp;/g,'&amp;amp;').replace(/&lt;/g,'&amp;lt;')
+                         .replace(/&gt;/g,'&amp;gt;').replace(/"/g,'&amp;quot;');
+}
+
+function render(items) {
+  const STATUS_COLOR = { running:'green', degraded:'orange', down:'red' };
+  document.getElementById('svc-list').innerHTML = items.map(it =&gt; `
+    &lt;li&gt;
+      &lt;strong&gt;${esc(it.name)}&lt;/strong&gt; · ${esc(it.team)} · SLA ${esc(it.sla)}
+      &lt;span style="color:${STATUS_COLOR[it.status] || 'gray'}"&gt;
+        ${esc(it.status || 'unknown')}
+      &lt;/span&gt;
+      &lt;button onclick="setStatus('${esc(it.id)}','running')"&gt;Running&lt;/button&gt;
+      &lt;button onclick="setStatus('${esc(it.id)}','degraded')"&gt;Degraded&lt;/button&gt;
+      &lt;button onclick="setStatus('${esc(it.id)}','down')"&gt;Down&lt;/button&gt;
+      ${it._updated ? '&lt;small&gt;Updated ' + esc(it._updated) + ' by ' + esc(it._updated_by) + '&lt;/small&gt;' : ''}
+    &lt;/li&gt;
+  `).join('');
+}
+
+// On load: seed master data, then start live polling.
+seedMaster().then(() =&gt; {
+  load();
+  setInterval(load, 2000);
+});
+&lt;/script&gt;</pre>
         </div>
 
-        <p>
-          <strong>Reserved fields</strong> are stripped from your input and managed by the server:
-          <code>id</code>, <code>_ts</code> (created), <code>_updated</code>,
-          <code>_created_by</code>, <code>_updated_by</code>. Pass <code>_actor: "your name"</code>
-          on writes to attribute changes.
+        <p style="margin-top:14px;">
+          <strong>How it works end-to-end:</strong>
         </p>
+        <ul>
+          <li>First user opens the page → <code>seedMaster()</code> calls the seed endpoint with
+            <code>mode:"upsert"</code> → services are written to the dataset with
+            <code>status: undefined</code>.</li>
+          <li>Any user clicks a status button → <code>PATCH</code> updates just that field →
+            <code>rev</code> bumps → all other open tabs pick it up within 2 s.</li>
+          <li>You add a new service to the <code>MASTER</code> array and redeploy → next page load,
+            <code>seedMaster()</code> inserts the new entry without touching existing statuses.</li>
+          <li>To fully reset: change <code>mode</code> to <code>"replace"</code> in
+            <code>seedMaster()</code>, deploy once, then change it back to
+            <code>"upsert"</code>.</li>
+        </ul>
+
         <p>
-          <strong>Storage:</strong> <code>data/&lt;site&gt;/&lt;dataset&gt;.json</code> on disk
-          (atomic writes, per-file lock for concurrent requests). Persists across re-deploys —
-          deleting the site does not delete the dataset.
+          <strong>Storage:</strong> <code>data/&lt;site&gt;/services.json</code> on disk
+          (atomic writes, per-file lock). Persists across re-deploys — deleting the site does
+          not delete the dataset.
         </p>
       </section>
 
