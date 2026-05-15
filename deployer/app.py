@@ -258,7 +258,7 @@ def api_form_submissions(site: str, form: str):
 
 # ---------- Datasets API (collaborative state for static pages) ----------
 
-@app.route("/data/<site>/<dataset>/items", methods=["GET", "POST"])
+@app.route("/data/<site>/<dataset>/items", methods=["GET", "POST", "DELETE"])
 def data_items(site: str, dataset: str):
     site = _safe_name(site)
     dataset = _safe_name(dataset)
@@ -283,6 +283,15 @@ def data_items(site: str, dataset: str):
             "rev": data["rev"],
             "items": data["items"],
         }
+
+    if request.method == "DELETE":
+        with lock:
+            data = _read_dataset(path)
+            cleared = len(data["items"])
+            data["items"] = []
+            data["rev"] += 1
+            _write_dataset(path, data)
+        return {"cleared": cleared, "rev": data["rev"]}
 
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
@@ -343,6 +352,110 @@ def data_item(site: str, dataset: str, item_id: str):
         data["rev"] += 1
         _write_dataset(path, data)
         return {"item": merged, "rev": data["rev"]}
+
+
+# Seed endpoint — bulk-initialise a dataset from a hardcoded master array.
+#
+# Body: { "items": [...], "key": "fieldName", "mode": "init"|"upsert"|"replace" }
+#
+#   mode "init"    (default) — seeds only if the dataset is currently empty; no-op otherwise.
+#   mode "upsert"  — merges into existing items by the value of `key`; creates missing ones.
+#   mode "replace" — clears all items first, then seeds fresh (for full master-data resets).
+#
+# Reserved server fields in input items (id, _ts, _updated, _created_by, _updated_by)
+# are stripped before writing; each new item gets a server-generated `id`.
+#
+# Returns: { seeded, updated, skipped, rev, items }
+@app.route("/data/<site>/<dataset>/seed", methods=["POST"])
+def data_seed(site: str, dataset: str):
+    site = _safe_name(site)
+    dataset = _safe_name(dataset)
+    if not _site_path(site).exists():
+        abort(404, "unknown site")
+
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        abort(400, "body must be a JSON object with an 'items' array")
+    raw_items = body.get("items")
+    if not isinstance(raw_items, list):
+        abort(400, "'items' must be an array")
+
+    mode = str(body.get("mode") or "init").strip()
+    if mode not in ("init", "upsert", "replace"):
+        abort(400, "mode must be 'init', 'upsert', or 'replace'")
+    key = str(body.get("key") or "").strip()
+    if mode == "upsert" and not key:
+        abort(400, "'key' field name is required for mode 'upsert'")
+
+    path = _dataset_path(site, dataset)
+    lock = _dataset_lock(path)
+    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+
+    with lock:
+        data = _read_dataset(path)
+
+        if mode == "init" and len(data["items"]) > 0:
+            return {
+                "seeded": 0, "updated": 0,
+                "skipped": len(data["items"]),
+                "rev": data["rev"],
+                "items": data["items"],
+            }
+
+        if mode == "replace":
+            data["items"] = []
+
+        # Build lookup index for upsert mode.
+        key_index: Dict[str, int] = {}
+        if mode == "upsert":
+            key_index = {
+                str(it.get(key, "")): i
+                for i, it in enumerate(data["items"])
+                if it.get(key) is not None
+            }
+
+        seeded = 0
+        updated = 0
+        for raw in raw_items:
+            if not isinstance(raw, dict):
+                continue
+            fields = _scrub(raw)
+            actor = str(raw.get("_actor") or "").strip()[:60]
+
+            if mode == "upsert":
+                key_val = str(fields.get(key, ""))
+                if key_val in key_index:
+                    idx = key_index[key_val]
+                    merged = dict(data["items"][idx])
+                    merged.update(fields)
+                    merged["_updated"] = now
+                    if actor:
+                        merged["_updated_by"] = actor
+                    data["items"][idx] = merged
+                    updated += 1
+                    continue
+
+            item: Dict[str, object] = {
+                "id": secrets.token_urlsafe(8),
+                "_ts": now,
+                "_created_by": actor,
+                **fields,
+            }
+            data["items"].append(item)
+            if mode == "upsert":
+                key_index[str(item.get(key, ""))] = len(data["items"]) - 1
+            seeded += 1
+
+        if seeded or updated:
+            data["rev"] += 1
+        _write_dataset(path, data)
+        return {
+            "seeded": seeded,
+            "updated": updated,
+            "skipped": 0,
+            "rev": data["rev"],
+            "items": data["items"],
+        }
 
 
 # ---------- Examples (one-click deploy of starter sites) ----------

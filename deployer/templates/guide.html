@@ -109,13 +109,22 @@ FORM CAPTURE  (append-only — contact, signup, feedback, RSVP, survey, etc.)
   • Optional redirect:  &lt;input type="hidden" name="_redirect" value="thanks.html"&gt;
   • Form-name rules: lowercase, digits, dashes, underscores — max 50 chars
 
-DATASETS API  (live shared state — issue trackers, todos, polls, votes, kanban, etc.
-               use whenever multiple users add / edit / delete shared items)
+DATASETS API  (live shared state — issue trackers, todos, polls, votes, kanban,
+               service-status boards, SVC arrays, any hardcoded master data that
+               needs live mutable fields visible to all users in real time)
   GET    /data/&lt;site&gt;/&lt;dataset&gt;/items[?since=&lt;rev&gt;]
          → { changed, rev, items: [...] }   (if since==rev: { changed:false, rev })
   POST   /data/&lt;site&gt;/&lt;dataset&gt;/items          body: { ...fields, _actor?:"name" }  → 201 { item, rev }
+  POST   /data/&lt;site&gt;/&lt;dataset&gt;/seed
+         body: { items:[...], key?:"fieldName", mode?:"init"|"upsert"|"replace" }
+         → { seeded, updated, skipped, rev, items }
+         mode "init"    — seeds only if dataset is empty (safe to call every page load)
+         mode "upsert"  — merges by key field; adds new items, refreshes master fields,
+                          never overwrites mutable fields users have already edited
+         mode "replace" — clears all items and re-seeds (full reset)
   PATCH  /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;     body: { ...fields }                  → 200 { item, rev }
   DELETE /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;                                           → 200 { rev }
+  DELETE /data/&lt;site&gt;/&lt;dataset&gt;/items                                                 → 200 { cleared, rev }
   Server-managed keys (strip from your code, never send):  id  _ts  _updated  _created_by  _updated_by
   Always derive site name from URL:  const SITE = location.pathname.split('/')[2];
 
@@ -164,28 +173,46 @@ Repeat this block for every form found. If no forms exist, write: NO FORMS FOUND
 
 ---
 
-## SECTION 4 — DATASETS (live shared state)
-Only include this section if my project has a feature where multiple users see and
-change the same list of items in real time (issue tracker, todo, poll, vote, etc.).
+## SECTION 4 — DATASETS (live shared state + hardcoded master data)
+Include this section for TWO kinds of features:
 
-For each candidate:
+A) Any interactive feature where multiple users add / edit / delete shared items
+   (issue tracker, todo, poll, vote, kanban, RSVP, etc.)
 
-  Feature:       &lt;what it is&gt;
+B) Any hardcoded JS array or HTML table that already contains master data
+   (services, teams, SLAs, products, SVC list…) where you want to add live
+   mutable fields (status, notes, owner, flag…) visible to all users in real time.
+
+For each candidate, output ALL of the following:
+
+  Feature:       &lt;what it is — be specific, e.g. "service status board" or "issue list"&gt;
+  Type:          A (users create items) | B (seed from hardcoded array)
   Dataset name:  &lt;kebab-case&gt;
-  Item shape:    { field: type, ... }   (only YOUR fields — no server-reserved keys)
-  HTML scaffold: &lt;any empty container element the script needs, e.g. &lt;ul id="list"&gt;&lt;/ul&gt;&gt;
+
+  If Type B — Master data array:
+    const MASTER = [ ... ];   ← the exact hardcoded array extracted from my files
+    Seed call (paste once, call on every page load — safe because mode is "upsert"):
+      await fetch('/data/' + SITE + '/DATASET/seed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: MASTER, key: 'FIELD-THAT-IS-UNIQUE', mode: 'upsert' })
+      });
+
+  Item shape:    { field: type, ... }   (only YOUR fields — omit server-reserved keys)
+  HTML scaffold: &lt;any container elements the script needs, e.g. &lt;ul id="list"&gt;&lt;/ul&gt;&gt;
   Paste into:    &lt;filename&gt; just before &lt;/body&gt;
   Script:
     &lt;script&gt;
     // complete vanilla-JS block, no dependencies
-    // derives SITE from location.pathname.split('/')[2]
-    // implements: load(), add(fields), update(id, fields), remove(id)
-    // polls every 2000 ms using ?since=rev
-    // renders into the HTML scaffold above
-    // escapes all user strings with esc() to prevent XSS
+    // const SITE = location.pathname.split('/')[2]
+    // const API  = '/data/' + SITE + '/DATASET/items'
+    // Type B: calls seedMaster() before the first load()
+    // load() uses ?since=rev for cheap polling every 2000 ms
+    // renders into the HTML scaffold using esc() for XSS safety
+    // exposes update(id, fields) / add(fields) / remove(id) as needed
     &lt;/script&gt;
 
-If nothing qualifies, write: NO DATASET CANDIDATES
+If nothing qualifies for either type, write: NO DATASET CANDIDATES
 
 ---
 
@@ -355,7 +382,8 @@ zip -r my-landing.zip my-landing -x "*.DS_Store" "__MACOSX/*"</pre>
         <p>
           Forms are append-only — perfect for capture, not for editing. When you need
           <strong>shared state that all visitors can read and update</strong> (issue trackers,
-          to-do lists, polls, RSVP lists, etc.), use the <em>datasets API</em> instead.
+          service status boards, to-do lists, polls, RSVP lists, etc.), use the
+          <em>datasets API</em> instead.
         </p>
         <p>
           Each dataset is a list of items identified by a server-generated <code>id</code>, with a
@@ -364,58 +392,170 @@ zip -r my-landing.zip my-landing -x "*.DS_Store" "__MACOSX/*"</pre>
           dashboard to see it in action.
         </p>
 
-        <p><strong>Endpoints</strong> (no auth — anyone with the URL can read/write):</p>
+        <p><strong>All endpoints</strong> (no auth — anyone with the URL can read/write):</p>
         <div class="snippet">
           <button class="copy" data-copy="#api-spec">Copy</button>
 <pre id="api-spec" style="margin:0;">GET    /data/&lt;site&gt;/&lt;dataset&gt;/items[?since=&lt;rev&gt;]
    → { changed, rev, items: [...] }
-   (when since == rev, body is just { changed:false, rev } — cheap polling)
+   (when since == rev: { changed:false, rev } — no payload, cheap poll)
 
 POST   /data/&lt;site&gt;/&lt;dataset&gt;/items
    body: { ...your fields, _actor?: "name" }
    → 201 { item, rev }
+
+POST   /data/&lt;site&gt;/&lt;dataset&gt;/seed
+   body: { items: [...], key?: "fieldName", mode?: "init"|"upsert"|"replace" }
+   → { seeded, updated, skipped, rev, items }
 
 PATCH  /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;
    body: { ...fields to merge, _actor?: "name" }
    → 200 { item, rev }
 
 DELETE /data/&lt;site&gt;/&lt;dataset&gt;/items/&lt;id&gt;
-   → 200 { rev }</pre>
+   → 200 { rev }
+
+DELETE /data/&lt;site&gt;/&lt;dataset&gt;/items
+   → 200 { cleared, rev }          ← clears ALL items</pre>
         </div>
 
-        <p><strong>Minimal client</strong> — paste into any page deployed under
-          <code>/sites/&lt;site&gt;/</code>:</p>
+        <p><strong>Reserved fields</strong> — stripped from client input, managed by server:</p>
+        <p class="page-sub" style="margin-top:0;">
+          <code>id</code> &nbsp;·&nbsp; <code>_ts</code> (created at) &nbsp;·&nbsp;
+          <code>_updated</code> &nbsp;·&nbsp; <code>_created_by</code> &nbsp;·&nbsp;
+          <code>_updated_by</code>. Pass <code>_actor: "name"</code> on writes to attribute changes.
+        </p>
+
+        <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+
+        <h3 style="margin:0 0 8px; font-size:15px;">
+          Pattern: hardcoded master data → live shared state
+        </h3>
+        <p>
+          If your page already has a hardcoded JS array (services, teams, SLAs, SVC list…) and
+          you want to add live mutable fields on top (status, notes, owner…), use the
+          <strong>seed endpoint</strong> to push that array into a dataset once, then let all
+          users read and update it in real time.
+        </p>
+
+        <p><strong>Three seed modes</strong>:</p>
+        <ul>
+          <li>
+            <code>mode: "init"</code> <em>(default)</em> — seeds only when the dataset is empty.
+            The first user to load the page populates it; everyone else just reads the live state.
+            Safe to call on every page load.
+          </li>
+          <li>
+            <code>mode: "upsert"</code> — merges by a key field (e.g. <code>"name"</code> or
+            <code>"service_id"</code>). New master entries are added; existing ones get their
+            master-data fields refreshed without overwriting mutable fields like
+            <code>status</code>. Use this when the master list grows over time.
+          </li>
+          <li>
+            <code>mode: "replace"</code> — clears all items and re-seeds from scratch.
+            Use for a full reset (e.g. a hard master-data change). All live edits are lost.
+          </li>
+        </ul>
+
+        <p><strong>Complete example — service status board</strong>:</p>
         <div class="snippet">
-          <button class="copy" data-copy="#api-client">Copy</button>
-<pre id="api-client" style="margin:0;">const SITE = location.pathname.split('/')[2];     // "/sites/&lt;name&gt;/" → name
-const API  = '/data/' + SITE + '/issues/items';
+          <button class="copy" data-copy="#seed-example">Copy</button>
+<pre id="seed-example" style="margin:0;">&lt;!-- index.html — paste just before &lt;/body&gt; --&gt;
+&lt;ul id="svc-list"&gt;&lt;/ul&gt;
+
+&lt;script&gt;
+// ── Master data (hardcoded, owned by you) ─────────────────────────────────
+const MASTER = [
+  { name: 'Payment Gateway', team: 'Payments',  sla: '99.9%' },
+  { name: 'Auth Service',    team: 'Platform',  sla: '99.95%' },
+  { name: 'Notifications',   team: 'Comms',     sla: '99.5%' },
+  // add more services here — upsert mode keeps live edits intact
+];
+
+// ── Deployer wiring ───────────────────────────────────────────────────────
+const SITE    = location.pathname.split('/')[2];   // works on any deploy
+const API     = '/data/' + SITE + '/services/items';
+const SEED_EP = '/data/' + SITE + '/services/seed';
 
 let rev = -1;
+
+// Seed master data into the dataset.
+// mode "upsert" + key "name": adds new services, refreshes master fields,
+// never overwrites live fields (status, notes) that users have edited.
+async function seedMaster() {
+  await fetch(SEED_EP, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items: MASTER, key: 'name', mode: 'upsert' })
+  });
+}
+
 async function load() {
   const r = await fetch(API + (rev &lt; 0 ? '' : '?since=' + rev));
   const d = await r.json();
   if (d.changed === false) return;
   rev = d.rev;
-  render(d.items);                                  // ← your render fn
+  render(d.items);
 }
-async function add(fields)        { await fetch(API,           { method:'POST',  headers:{'Content-Type':'application/json'}, body: JSON.stringify(fields) }); load(); }
-async function update(id, fields) { await fetch(API+'/'+id,    { method:'PATCH', headers:{'Content-Type':'application/json'}, body: JSON.stringify(fields) }); load(); }
-async function remove(id)         { await fetch(API+'/'+id,    { method:'DELETE' }); load(); }
 
-setInterval(load, 2000);
-load();</pre>
+async function setStatus(id, status) {
+  const actor = localStorage.getItem('actor') || 'unknown';
+  await fetch(API + '/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ status, _actor: actor })
+  });
+  load();
+}
+
+function esc(s) {
+  return String(s ?? '').replace(/&amp;/g,'&amp;amp;').replace(/&lt;/g,'&amp;lt;')
+                         .replace(/&gt;/g,'&amp;gt;').replace(/"/g,'&amp;quot;');
+}
+
+function render(items) {
+  const STATUS_COLOR = { running:'green', degraded:'orange', down:'red' };
+  document.getElementById('svc-list').innerHTML = items.map(it =&gt; `
+    &lt;li&gt;
+      &lt;strong&gt;${esc(it.name)}&lt;/strong&gt; · ${esc(it.team)} · SLA ${esc(it.sla)}
+      &lt;span style="color:${STATUS_COLOR[it.status] || 'gray'}"&gt;
+        ${esc(it.status || 'unknown')}
+      &lt;/span&gt;
+      &lt;button onclick="setStatus('${esc(it.id)}','running')"&gt;Running&lt;/button&gt;
+      &lt;button onclick="setStatus('${esc(it.id)}','degraded')"&gt;Degraded&lt;/button&gt;
+      &lt;button onclick="setStatus('${esc(it.id)}','down')"&gt;Down&lt;/button&gt;
+      ${it._updated ? '&lt;small&gt;Updated ' + esc(it._updated) + ' by ' + esc(it._updated_by) + '&lt;/small&gt;' : ''}
+    &lt;/li&gt;
+  `).join('');
+}
+
+// On load: seed master data, then start live polling.
+seedMaster().then(() =&gt; {
+  load();
+  setInterval(load, 2000);
+});
+&lt;/script&gt;</pre>
         </div>
 
-        <p>
-          <strong>Reserved fields</strong> are stripped from your input and managed by the server:
-          <code>id</code>, <code>_ts</code> (created), <code>_updated</code>,
-          <code>_created_by</code>, <code>_updated_by</code>. Pass <code>_actor: "your name"</code>
-          on writes to attribute changes.
+        <p style="margin-top:14px;">
+          <strong>How it works end-to-end:</strong>
         </p>
+        <ul>
+          <li>First user opens the page → <code>seedMaster()</code> calls the seed endpoint with
+            <code>mode:"upsert"</code> → services are written to the dataset with
+            <code>status: undefined</code>.</li>
+          <li>Any user clicks a status button → <code>PATCH</code> updates just that field →
+            <code>rev</code> bumps → all other open tabs pick it up within 2 s.</li>
+          <li>You add a new service to the <code>MASTER</code> array and redeploy → next page load,
+            <code>seedMaster()</code> inserts the new entry without touching existing statuses.</li>
+          <li>To fully reset: change <code>mode</code> to <code>"replace"</code> in
+            <code>seedMaster()</code>, deploy once, then change it back to
+            <code>"upsert"</code>.</li>
+        </ul>
+
         <p>
-          <strong>Storage:</strong> <code>data/&lt;site&gt;/&lt;dataset&gt;.json</code> on disk
-          (atomic writes, per-file lock for concurrent requests). Persists across re-deploys —
-          deleting the site does not delete the dataset.
+          <strong>Storage:</strong> <code>data/&lt;site&gt;/services.json</code> on disk
+          (atomic writes, per-file lock). Persists across re-deploys — deleting the site does
+          not delete the dataset.
         </p>
       </section>
 
