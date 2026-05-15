@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set active = '' %}
+{% block title %}Submission received{% endblock %}
+{% block crumbs %}<span class="current">Form submitted</span>{% endblock %}
+
+{% block content %}
+  <div class="empty" style="max-width:520px; margin:48px auto;">
+    <div class="dropzone-icon" style="background:var(--success-soft); color:var(--success); border-color:transparent;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+    </div>
+    <div class="big" style="margin-top:14px">Thanks — we got it.</div>
+    <div>Your submission to <code>{{ form }}</code> on <code>{{ site }}</code> was recorded.</div>
+    <div style="margin-top:18px;">
+      <a class="btn btn-primary" href="{{ url_for('serve_site', site=site) }}">Back to site</a>
+    </div>
+  </div>
+{% endblock %}

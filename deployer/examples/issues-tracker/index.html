@@ -1,0 +1,348 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Production issues</title>
+  <style>
+    :root {
+      --bg: #f5f7fb; --surface: #fff; --border: #e3e7ee; --text: #0f172a;
+      --muted: #64748b; --primary: #2563eb; --primary-soft: #eff6ff;
+      --open: #d97706; --open-soft: #fef3c7;
+      --ignorable: #475569; --ignorable-soft: #e2e8f0;
+      --treated: #16a34a; --treated-soft: #dcfce7;
+      --danger: #dc2626; --danger-soft: #fee2e2;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0b1220; --surface: #111827; --border: #1f2937; --text: #e5e7eb;
+        --muted: #94a3b8; --primary: #60a5fa; --primary-soft: rgba(96,165,250,.12);
+        --open-soft: rgba(251,191,36,.16); --ignorable-soft: rgba(148,163,184,.18);
+        --treated-soft: rgba(34,197,94,.18); --danger-soft: rgba(248,113,113,.16);
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: var(--text); background: var(--bg);
+      margin: 0; padding: 32px 20px 64px;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; }
+    header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+    h1 { font-size: 22px; margin: 0 0 4px; letter-spacing: -0.01em; }
+    .sub { color: var(--muted); margin: 0; font-size: 13px; }
+    .live {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 2px 10px; border-radius: 999px;
+      background: var(--treated-soft); color: var(--treated);
+      font-size: 12px; font-weight: 500;
+    }
+    .live::before {
+      content: ""; width: 7px; height: 7px; border-radius: 50%;
+      background: currentColor; animation: pulse 1.5s infinite;
+    }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; box-shadow: 0 1px 2px rgba(15,23,42,.04);
+    }
+    .card + .card { margin-top: 16px; }
+    .card-pad { padding: 18px 20px; }
+
+    /* Add form */
+    form.add { display: grid; gap: 10px; grid-template-columns: 2fr 1fr 1fr auto; }
+    form.add input, form.add select {
+      font: 14px inherit; padding: 9px 12px; color: var(--text);
+      background: var(--surface); border: 1px solid var(--border); border-radius: 6px;
+    }
+    form.add input:focus, form.add select:focus {
+      outline: none; border-color: var(--primary);
+      box-shadow: 0 0 0 3px var(--primary-soft);
+    }
+    @media (max-width: 640px) { form.add { grid-template-columns: 1fr; } }
+
+    .btn {
+      font: 500 13px inherit;
+      padding: 9px 14px; border-radius: 6px; cursor: pointer;
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border); white-space: nowrap;
+    }
+    .btn:hover { background: var(--bg); }
+    .btn-primary { background: var(--primary); color: #fff; border-color: var(--primary); }
+    .btn-primary:hover { filter: brightness(1.05); }
+    .btn-ghost { border-color: transparent; background: transparent; color: var(--muted); }
+    .btn-ghost:hover { background: var(--bg); color: var(--text); }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    .toolbar {
+      display: flex; flex-wrap: wrap; align-items: center; gap: 10px;
+      margin: 22px 0 12px;
+    }
+    .filters { display: inline-flex; gap: 4px; background: var(--surface); border: 1px solid var(--border); padding: 3px; border-radius: 8px; }
+    .filters .btn { border: 0; padding: 5px 12px; }
+    .filters .btn[aria-pressed=true] { background: var(--primary-soft); color: var(--primary); }
+    .toolbar .who {
+      margin-left: auto; display: inline-flex; align-items: center; gap: 8px;
+      font-size: 12px; color: var(--muted);
+    }
+    .toolbar .who input {
+      font: 12px inherit; padding: 5px 9px; border: 1px solid var(--border);
+      border-radius: 6px; background: var(--surface); color: var(--text);
+      width: 150px;
+    }
+
+    /* Issue list */
+    .empty {
+      text-align: center; padding: 48px 20px; color: var(--muted);
+      border: 1px dashed var(--border); border-radius: 12px; background: var(--surface);
+    }
+    .issue {
+      display: grid; grid-template-columns: auto 1fr auto;
+      gap: 14px; padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+      align-items: center;
+    }
+    .issue:last-child { border-bottom: 0; }
+    .issue.flash-new { animation: flash 1.4s ease-out; }
+    @keyframes flash {
+      0% { background: var(--treated-soft); } 100% { background: transparent; }
+    }
+    .pill {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 2px 10px; border-radius: 999px;
+      font-size: 11.5px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+    .pill.open      { background: var(--open-soft); color: var(--open); }
+    .pill.ignorable { background: var(--ignorable-soft); color: var(--ignorable); }
+    .pill.treated   { background: var(--treated-soft); color: var(--treated); }
+    .pill.sev-low    { background: var(--ignorable-soft); color: var(--ignorable); }
+    .pill.sev-medium { background: var(--open-soft); color: var(--open); }
+    .pill.sev-high   { background: var(--danger-soft); color: var(--danger); }
+    .issue .title { font-weight: 600; }
+    .issue .meta {
+      color: var(--muted); font-size: 12px;
+      display: flex; flex-wrap: wrap; gap: 10px; margin-top: 2px;
+    }
+    .issue .actions { display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end; }
+    .err {
+      margin-top: 10px; padding: 8px 12px; border-radius: 6px;
+      background: var(--danger-soft); color: var(--danger); font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Production issues</h1>
+        <p class="sub">Anyone with this link can add issues and mark them <strong>Ignorable</strong> or <strong>Treated</strong>. Changes sync live.</p>
+      </div>
+      <span class="live">Live</span>
+    </header>
+
+    <section class="card card-pad">
+      <form class="add" id="add">
+        <input name="title" placeholder="Issue title (e.g. checkout 500s spike)" required maxlength="200">
+        <input name="team" placeholder="Team (e.g. payments)" required maxlength="40">
+        <select name="severity">
+          <option value="low">Low</option>
+          <option value="medium" selected>Medium</option>
+          <option value="high">High</option>
+        </select>
+        <button class="btn btn-primary" type="submit">Add issue</button>
+      </form>
+      <div class="err" id="err" hidden></div>
+    </section>
+
+    <div class="toolbar">
+      <div class="filters" role="tablist">
+        <button class="btn" data-filter="all"       aria-pressed="true">All <span data-count="all">0</span></button>
+        <button class="btn" data-filter="open"      aria-pressed="false">Open <span data-count="open">0</span></button>
+        <button class="btn" data-filter="ignorable" aria-pressed="false">Ignorable <span data-count="ignorable">0</span></button>
+        <button class="btn" data-filter="treated"   aria-pressed="false">Treated <span data-count="treated">0</span></button>
+      </div>
+      <label class="who">
+        Your name
+        <input id="actor" placeholder="anonymous">
+      </label>
+    </div>
+
+    <section class="card" id="list-card">
+      <div id="list"></div>
+    </section>
+  </div>
+
+  <script>
+  (function () {
+    // /sites/<site>/  →  site name lives at index 2
+    const parts = location.pathname.split('/');
+    const site = parts[1] === 'sites' ? parts[2] : parts[2] || '';
+    if (!site) document.getElementById('err').textContent = 'Could not determine site name from URL.';
+
+    const API = '/data/' + site + '/issues/items';
+
+    const $list   = document.getElementById('list');
+    const $err    = document.getElementById('err');
+    const $actor  = document.getElementById('actor');
+    const $filters = document.querySelectorAll('.filters .btn');
+
+    let rev = -1;
+    let items = [];
+    let filter = 'all';
+    let knownIds = new Set();
+
+    $actor.value = localStorage.getItem('issues.actor') || '';
+    $actor.addEventListener('input', function () {
+      localStorage.setItem('issues.actor', $actor.value.trim());
+    });
+
+    $filters.forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        filter = btn.dataset.filter;
+        $filters.forEach(function (b) {
+          b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+        });
+        render();
+      });
+    });
+
+    document.getElementById('add').addEventListener('submit', async function (e) {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const body = {
+        title:    (fd.get('title') || '').trim(),
+        team:     (fd.get('team') || '').trim(),
+        severity: fd.get('severity') || 'medium',
+        status:   'open',
+        _actor:   $actor.value.trim() || 'anonymous'
+      };
+      if (!body.title || !body.team) return;
+      try {
+        const r = await fetch(API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        e.target.reset();
+        e.target.querySelector('select').value = 'medium';
+        await load(true);
+      } catch (err) { showErr(err.message); }
+    });
+
+    async function patch(id, fields) {
+      fields._actor = $actor.value.trim() || 'anonymous';
+      const r = await fetch(API + '/' + encodeURIComponent(id), {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields)
+      });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      await load(true);
+    }
+
+    async function del(id) {
+      if (!confirm('Delete this issue?')) return;
+      const r = await fetch(API + '/' + encodeURIComponent(id), { method: 'DELETE' });
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      await load(true);
+    }
+
+    async function load(force) {
+      try {
+        const url = API + (force || rev < 0 ? '' : '?since=' + rev);
+        const r = await fetch(url, { cache: 'no-store' });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        if (data.changed === false) return;
+        rev = data.rev;
+        items = data.items || [];
+        render();
+        hideErr();
+      } catch (err) { showErr('Sync failed: ' + err.message); }
+    }
+
+    function render() {
+      const counts = { all: items.length, open: 0, ignorable: 0, treated: 0 };
+      items.forEach(function (it) {
+        if (counts[it.status] !== undefined) counts[it.status]++;
+      });
+      Object.keys(counts).forEach(function (k) {
+        const el = document.querySelector('[data-count="' + k + '"]');
+        if (el) el.textContent = counts[k];
+      });
+
+      const visible = items
+        .filter(function (it) { return filter === 'all' || it.status === filter; })
+        .sort(function (a, b) { return (b._ts || '').localeCompare(a._ts || ''); });
+
+      if (!visible.length) {
+        $list.innerHTML = '<div class="empty">No issues' +
+          (filter === 'all' ? ' yet — add one above.' : ' in this view.') + '</div>';
+        return;
+      }
+
+      const newIds = new Set(items.map(function (it) { return it.id; }));
+      $list.innerHTML = visible.map(function (it) { return rowHtml(it); }).join('');
+      visible.forEach(function (it) {
+        if (!knownIds.has(it.id)) {
+          const el = $list.querySelector('[data-id="' + it.id + '"]');
+          if (el) el.classList.add('flash-new');
+        }
+      });
+      knownIds = newIds;
+
+      $list.querySelectorAll('[data-act]').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          const id = btn.closest('.issue').dataset.id;
+          const act = btn.dataset.act;
+          if (act === 'delete') return del(id);
+          patch(id, { status: act }).catch(function (e) { showErr(e.message); });
+        });
+      });
+    }
+
+    function rowHtml(it) {
+      const status = it.status || 'open';
+      const sev = (it.severity || 'medium').toLowerCase();
+      const editor = it._updated_by || it._created_by || 'anonymous';
+      const stamp = (it._updated || it._ts || '').replace('T', ' ').replace('Z', ' UTC');
+      const buttons = [];
+      if (status !== 'open')      buttons.push(act('Reopen', 'open'));
+      if (status !== 'ignorable') buttons.push(act('Ignorable', 'ignorable'));
+      if (status !== 'treated')   buttons.push(act('Treated', 'treated'));
+      buttons.push('<button class="btn btn-sm btn-ghost" data-act="delete" title="Delete">✕</button>');
+      return (
+        '<div class="issue" data-id="' + esc(it.id) + '">' +
+          '<span class="pill ' + status + '">' + status + '</span>' +
+          '<div>' +
+            '<div class="title">' + esc(it.title || '(untitled)') + '</div>' +
+            '<div class="meta">' +
+              '<span><strong>' + esc(it.team || '?') + '</strong> team</span>' +
+              '<span class="pill sev-' + esc(sev) + '">' + esc(sev) + '</span>' +
+              '<span>updated ' + esc(stamp) + ' by ' + esc(editor) + '</span>' +
+            '</div>' +
+          '</div>' +
+          '<div class="actions">' + buttons.join('') + '</div>' +
+        '</div>'
+      );
+    }
+    function act(label, status) {
+      return '<button class="btn btn-sm" data-act="' + status + '">' + label + '</button>';
+    }
+    function esc(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+    function showErr(msg) { $err.textContent = msg; $err.hidden = false; }
+    function hideErr() { $err.hidden = true; }
+
+    setInterval(function () { load(false); }, 2000);
+    load(true);
+  })();
+  </script>
+</body>
+</html>
