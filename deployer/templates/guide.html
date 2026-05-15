@@ -136,6 +136,12 @@ STEP 0 — SCAN  (do this silently before writing any section)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 Before filling the sections, scan every file for:
+  • Single-file HTML bundles — any .html that contains both &lt;style&gt; and &lt;script&gt; blocks
+      inline instead of linking to external .css / .js files
+  • &lt;style&gt; blocks longer than 5 lines  →  candidate to extract into styles/
+  • &lt;script&gt; blocks without a src= attribute, longer than 5 lines
+      →  candidate to extract into scripts/
+      Exception: tiny inline handlers (&lt;5 lines, no functions) may stay inline
   • Absolute asset paths  (src="/…"  href="/…"  url('/…'))
   • &lt;form&gt; elements  →  note file, current action, all named/unnamed fields
   • Hardcoded JS arrays / const X = [...] / var Y = [...] / HTML &lt;table&gt; with static rows
@@ -145,8 +151,51 @@ Before filling the sections, scan every file for:
       (status badges, flag icons, notes text, owner names — currently hardcoded)
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-OUTPUT — 7 SECTIONS, FILLED IN COMPLETELY, NO PLACEHOLDERS
+OUTPUT — 8 SECTIONS, FILLED IN COMPLETELY, NO PLACEHOLDERS
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+## SECTION 0 — PROJECT STRUCTURE &amp; FILE SPLIT
+If any HTML file contains inline &lt;style&gt; or &lt;script&gt; blocks, extract them into
+separate files and show the target folder layout.
+
+Target layout (use the site name from Section 1 as the root folder name):
+
+  &lt;site-name&gt;/
+  ├── index.html          ← stripped of inline &lt;style&gt;/&lt;script&gt; blocks
+  ├── about.html          ← (any other .html files, unchanged unless they also have blocks)
+  ├── styles/
+  │   └── main.css        ← all extracted &lt;style&gt; content, merged in source order
+  ├── scripts/
+  │   └── app.js          ← all extracted &lt;script&gt; content, merged in source order
+  └── assets/             ← (only if images / fonts are referenced)
+
+Rules:
+  • If a file has multiple &lt;style&gt; blocks, concatenate them into one styles/main.css
+  • If a file has multiple &lt;script&gt; blocks (excluding tiny inline handlers), concatenate
+    them into one scripts/app.js — preserve the order they appear in the HTML
+  • Replace each extracted block in the HTML with the correct external reference:
+      &lt;style&gt;…&lt;/style&gt;           →  &lt;link rel="stylesheet" href="styles/main.css"&gt;
+      &lt;script&gt;…&lt;/script&gt;         →  &lt;script src="scripts/app.js"&gt;&lt;/script&gt;
+    Place &lt;link&gt; inside &lt;head&gt;. Place &lt;script src&gt; just before &lt;/body&gt;.
+  • Any new Deployer live-state &lt;script&gt; produced in Section 4 also goes into
+    scripts/app.js (appended after the existing JS), not inline in HTML.
+  • All paths in the extracted CSS (url('…')) must stay relative.
+
+For each file being split, output:
+
+  SOURCE FILE:  &lt;filename&gt;
+  EXTRACTS TO:
+    styles/main.css  — lines &lt;N–M&gt; (the &lt;style&gt; content, without the tags)
+    scripts/app.js   — lines &lt;N–M&gt; (the &lt;script&gt; content, without the tags)
+  HTML REPLACEMENTS:
+    Remove: &lt;style&gt; block at line N
+    Add in &lt;head&gt;: &lt;link rel="stylesheet" href="styles/main.css"&gt;
+    Remove: &lt;script&gt; block at line N
+    Add before &lt;/body&gt;: &lt;script src="scripts/app.js"&gt;&lt;/script&gt;
+
+If all files are already properly split: NONE — structure is already clean.
+
+---
 
 ## SECTION 1 — SITE NAME
 Exactly one line — the value to type into Deployer's "Site name" field.
@@ -259,14 +308,31 @@ Then:
 
 ---
 
-## SECTION 7 — COMPLETE PATCHED FILES
-For every file with ≤ 60 lines of change: paste the ENTIRE corrected file.
-Label each block with the file path on the line above the code fence.
-Larger files: omit here — Section 5 checklist covers them.
+## SECTION 7 — COMPLETE PATCHED &amp; EXTRACTED FILES
+Output every file that is new or changed. This includes:
+  • The modified HTML file(s) — with inline blocks removed and external references added
+  • styles/main.css — the full extracted CSS (if a split was done)
+  • scripts/app.js  — the full extracted JS, including any new Deployer live-state code
+                      appended at the bottom (from Section 4)
+  • Any other file that changed
 
-path/to/file.html
+Label each block with the file path on the line above the code fence.
+Write the COMPLETE file — no "[rest unchanged]", no omissions, no truncation.
+Omit only files with &gt; 200 lines of change — list those in Section 5 instead.
+
+styles/main.css
+```css
+(full extracted CSS — every rule, no omissions)
+```
+
+scripts/app.js
+```js
+(full extracted JS + any new Deployer polling/seed code appended at the bottom)
+```
+
+index.html
 ```html
-(full corrected file — no omissions, no "[rest unchanged]")
+(full corrected HTML — inline blocks replaced with external references)
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -292,16 +358,20 @@ MY PROJECT FILES
           <li>Paste your project files at the bottom under the <code>=== path/to/file ===</code>
             markers, or attach them directly. Include every file that has forms, data arrays,
             or interactive UI — skip pure assets (images, fonts).</li>
-          <li>The AI scans your files autonomously, then returns 7 sections — each maps to
+          <li>The AI scans your files autonomously, then returns 8 sections — each maps to
             one concrete action with zero interpretation required:
-            <br>Section 1 → site name field &nbsp;·&nbsp;
+            <br>Section 0 → folder layout + extracted CSS/JS files &nbsp;·&nbsp;
+            Section 1 → site name field &nbsp;·&nbsp;
             Section 3 → paste the form action replacements &nbsp;·&nbsp;
             Section 4 → paste the complete script block(s) &nbsp;·&nbsp;
-            Section 7 → overwrite files with patched versions &nbsp;·&nbsp;
+            Section 7 → overwrite or create all patched files &nbsp;·&nbsp;
             Section 6 → run the zip command and deploy.</li>
+          <li>If your page is a single HTML file with everything inline, Section 0 will
+            split it into <code>styles/main.css</code> and <code>scripts/app.js</code>
+            automatically. Section 7 delivers all three ready-to-save files.</li>
           <li>If your page has hardcoded data arrays (service lists, SVC arrays, team tables),
-            Section 4 will detect them and produce a ready-to-paste seed script that turns
-            them into live shared state — no manual wiring needed.</li>
+            Section 4 detects them and produces a ready-to-paste seed script — appended into
+            <code>scripts/app.js</code> — that turns them into live shared state.</li>
         </ol>
 
         <p class="page-sub" style="margin-top:14px;">
